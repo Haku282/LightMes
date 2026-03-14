@@ -21,7 +21,7 @@ public class ChatServer {
         }
 
         System.out.println("╔══════════════════════════════════════╗");
-        System.out.println("║      LightMes Chat Server v2.0       ║");
+        System.out.println("║      LightMes Chat Server v1.0       ║");
         System.out.println("╚══════════════════════════════════════╝");
         System.out.println("[INFO] Port: " + port);
 
