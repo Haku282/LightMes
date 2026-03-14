@@ -18,18 +18,18 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
 public class ChatClientGUI {
-    // Khai báo biến (đã thêm final cho gọn gàng và không bị lặp)
-    private final JFrame frame = new JFrame("Phần mềm Chat");
+    
+    private final JFrame frame = new JFrame("Chat Client");
     private final JTextArea messageArea = new JTextArea(20, 40);
     private JTextField textField = new JTextField(32); 
-    private final JButton sendButton = new JButton("Gửi");
+    private final JButton sendButton = new JButton("Send");
     
     private BufferedReader in;
     private PrintWriter out;
     private String clientName;
 
     public ChatClientGUI() {
-        // Thiết lập Giao diện (Layout)
+        // UI Setup (Layout)
         messageArea.setEditable(false);
         messageArea.setFont(new Font("Arial", Font.PLAIN, 14));
         frame.getContentPane().add(new JScrollPane(messageArea), BorderLayout.CENTER);
@@ -39,12 +39,12 @@ public class ChatClientGUI {
         bottomPanel.add(sendButton);
         frame.getContentPane().add(bottomPanel, BorderLayout.SOUTH);
 
-        // Xử lý sự kiện khi bấm nút "Gửi" hoặc nhấn Enter
+        // Handle 'Send' button click or Enter key
         ActionListener sendListener = e -> {
             String msg = textField.getText();
             if (!msg.trim().isEmpty()) {
-                out.println(clientName + ": " + msg); // Gửi kèm tên
-                textField.setText(""); // Xóa trắng ô nhập
+                out.println(clientName + ": " + msg); // Send message with name
+                textField.setText(""); // Clear input field
             }
         };
         textField.addActionListener(sendListener);
@@ -52,31 +52,34 @@ public class ChatClientGUI {
     }
 
     private void connectToServer() throws IOException {
-        // Cửa sổ popup hỏi tên người dùng lúc mới mở
+        // Prompt for username upon opening
         clientName = JOptionPane.showInputDialog(
-            frame, "Nhập tên của bạn:", "Đăng nhập Chat", JOptionPane.PLAIN_MESSAGE
+            frame, "Enter your name:", "Chat Login", JOptionPane.PLAIN_MESSAGE
         );
         if (clientName == null || clientName.trim().isEmpty()) {
-            clientName = "Khách_" + (int)(Math.random() * 100);
+            clientName = "Guest_" + (int)(Math.random() * 100);
         }
-        frame.setTitle("Phần mềm Chat - Đang dùng tên: " + clientName);
+        frame.setTitle("Chat Client - User: " + clientName);
 
-        // Kết nối Socket
-        Socket socket = new Socket("127.0.0.1", 6666);
+        // Socket Connection
+        Socket socket = new Socket("10.0.8.100", 6666);
         in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         out = new PrintWriter(socket.getOutputStream(), true);
 
-        // Chạy Thread riêng để nhận tin nhắn từ Server mà không làm đơ giao diện
+        // Automatically notify others upon joining
+        out.println("System: " + clientName + " has joined the chat room!");
+
+        // Run a separate Thread to receive messages from the Server
         new Thread(() -> {
             try {
                 String line;
                 while ((line = in.readLine()) != null) {
                     messageArea.append(line + "\n");
-                    // Tự động cuộn xuống dòng mới nhất
+                    // Auto-scroll to the newest line
                     messageArea.setCaretPosition(messageArea.getDocument().getLength());
                 }
             } catch (IOException ex) {
-                messageArea.append("\n[Hệ thống] Đã mất kết nối tới Server.\n");
+                messageArea.append("\n[System] Lost connection to the Server.\n");
             }
         }).start();
     }
@@ -85,7 +88,7 @@ public class ChatClientGUI {
         ChatClientGUI client = new ChatClientGUI();
         client.frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         client.frame.pack();
-        client.frame.setLocationRelativeTo(null); // Hiển thị ở giữa màn hình
+        client.frame.setLocationRelativeTo(null); // Center on screen
         client.frame.setVisible(true);
         
         client.connectToServer();
