@@ -1,143 +1,163 @@
 # LightMes
 
-Ứng dụng chat LAN viết bằng Java Swing, gồm:
-- 1 tiến trình server trung tâm
-- Nhiều client kết nối qua IP + port
+A Java Swing LAN chat application with a central server and multiple clients connecting via TCP sockets.
 
-Hỗ trợ **chat phòng chung (All)**, **chat riêng 1-1 (Private)**, gửi emoji, gửi file/ảnh Base64, đăng nhập/đăng ký tài khoản SQLite, và đăng xuất.
+Supports **public chat (All)**, **private 1-on-1 chat**, emoji, file/image transfer (Base64), SQLite-based login/register, and logout.
 
-## 1) Cấu trúc project
+## 1) Project Structure
 
 ```text
 LightMes/
   README.md
   client/
     pom.xml
-    db/users.db              ← SQLite database (tự tạo khi chạy lần đầu)
+    db/users.db                ← SQLite database (auto-created on first run)
     src/main/java/com/mycompany/client/
-      ChatServer.java        ← Server trung tâm
-      ChatClientGUI.java     ← Client GUI (Swing)
-      UserManager.java       ← Quản lý tài khoản (SQLite)
-      User.java              ← Model User
+      ChatServer.java          ← Central server (multi-threaded, per-client write queue)
+      ChatClientGUI.java       ← Client GUI (Java Swing)
+      UserManager.java         ← Account management (SQLite CRUD)
+      User.java                ← User model (username + password)
 ```
 
-## 2) Công nghệ sử dụng
+## 2) Tech Stack
 
-- Java 21+ (tested with Java 25)
-- Java Swing (UI)
-- Socket TCP
-- SQLite (lưu tài khoản qua `sqlite-jdbc`)
-- Maven (quản lý build & dependency)
+| Technology        | Purpose                           |
+|-------------------|-----------------------------------|
+| Java 21+          | Language runtime (tested Java 25) |
+| Java Swing        | Desktop GUI                       |
+| TCP Sockets       | Client ↔ Server communication     |
+| SQLite (`sqlite-jdbc` 3.45.3.0) | User account storage |
+| Maven             | Build & dependency management     |
 
-## 3) Tính năng
+## 3) Features
 
 ### Chat
-- **Chat phòng chung (All)**: Tất cả user đăng nhập đều thấy tin nhắn — broadcast.
-- **Chat riêng 1-1 (Private)**: Click vào user trong sidebar → gửi tin chỉ 2 người thấy, mỗi cuộc trò chuyện có lịch sử riêng.
-- Hỗ trợ **emoji** trong tin nhắn.
-- Gửi **file và ảnh** (Base64), phía nhận click để tải về. Ảnh được preview inline.
-- UI chat dạng **bubble**, phân biệt tin của mình (xanh lá, bên phải) / người khác (trắng, bên trái) / hệ thống (giữa, xám).
+- **Public Chat (All)** — All logged-in users see messages (broadcast).
+- **Private 1-on-1 Chat** — Click a user in the sidebar → messages are only visible to the two participants; each conversation keeps its own history.
+- **Emoji** — Built-in emoji picker (18 emojis) inserts directly into the message field.
+- **File & Image Transfer** — Send files up to **10 MB** via Base64 encoding. Images (png/jpg/gif/bmp/webp) are previewed inline; other files show a download link.
+- **Bubble-style UI** — Own messages (green, right-aligned) / others (white, left-aligned) / system (centered, gray).
 
-### Tài khoản & Kết nối
-- **Đăng ký / Đăng nhập** tài khoản (lưu SQLite trên server).
-- **Đăng xuất**: Ngắt kết nối, quay lại form đăng nhập — có thể đăng nhập lại tài khoản khác.
-- Client nhập động **Server IP + Port** khi kết nối.
+### Account & Connection
+- **Register / Login** — Accounts stored in SQLite on the server side.
+- **Logout** — Disconnects, clears local state, returns to the login form for re-authentication with same or different account.
+- **Dynamic Server IP + Port** — Client prompts for server address at connect time (default `127.0.0.1:6666`).
 
 ### Sidebar
-- **Danh sách user online** — tự cập nhật khi có người join/rời.
-- **Chấm đỏ unread** (●) hiển thị khi có tin nhắn chưa đọc ở conversation khác.
-- Nút chuyển nhanh giữa chat All và chat Private.
+- **Online user list** — Auto-updates on join/leave events.
+- **Refresh button** — Manually request an updated user list from the server.
+- **Unread indicator** (● red dot) — Appears next to conversations with unread messages.
+- One-click switching between All chat and private conversations.
 
-### Server
-- Broadcast tin nhắn public theo **hàng đợi riêng** từng client (giảm nghẽn).
-- Tự broadcast **danh sách user online** (`USERLIST:`) khi có join/disconnect.
-- Route **tin nhắn private** chỉ tới sender + target.
+### Server Architecture
+- **Per-client write queue** (`LinkedBlockingQueue`) — Non-blocking broadcast; each client has a dedicated writer thread that drains queued messages and flushes in batch.
+- **Auth-first protocol** — Server writes `AUTH:OK` / `AUTH:FAIL` synchronously before spawning the writer thread.
+- **Auto-broadcast user list** (`USERLIST:`) on every join, disconnect, or refresh request.
+- **Private message routing** — Server delivers `PRIVATE:` messages only to sender + target.
 
-## 4) Chạy ứng dụng
+## 4) Running the Application
 
-### Cách A: chạy trong VS Code / IDE
+### Option A: Run in IDE (VS Code / IntelliJ)
 
-1. Chạy class `ChatServer` trước (máy server).
-2. Chạy class `ChatClientGUI` trên từng máy user.
-3. Khi mở client:
-	- Chọn Đăng nhập hoặc Đăng ký
-	- Nhập tài khoản + mật khẩu
-	- Nhập IP server (LAN IP của máy chạy server)
-	- Nhập port (mặc định `6666`)
+1. Run `ChatServer` first (on the server machine).
+2. Run `ChatClientGUI` on each user machine.
+3. On the client:
+   - Choose **Login** or **Register**
+   - Enter username + password
+   - Enter the server's LAN IP (shown in server console output)
+   - Enter port (default `6666`)
 
-### Cách B: chạy bằng javac/java
-
-Từ thư mục `client`:
-
-```powershell
-# Compile (cần sqlite-jdbc JAR trong classpath)
-javac -encoding UTF-8 -d target/classes -cp "path/to/sqlite-jdbc-3.45.3.0.jar" src/main/java/com/mycompany/client/*.java
-
-# Run server (máy server)
-java -cp "target/classes;path/to/sqlite-jdbc-3.45.3.0.jar" com.mycompany.client.ChatServer
-
-# Run client (mỗi máy user)
-java -cp "target/classes;path/to/sqlite-jdbc-3.45.3.0.jar" com.mycompany.client.ChatClientGUI
-```
-
-### Cách C: chạy bằng Maven
+### Option B: Run with Maven
 
 ```powershell
+cd client
+
 # Compile
 mvn compile
 
 # Run server
 mvn exec:java -Dexec.mainClass="com.mycompany.client.ChatServer"
 
-# Run client
+# Run client (separate terminal)
 mvn exec:java -Dexec.mainClass="com.mycompany.client.ChatClientGUI"
 ```
 
-## 5) Chạy trên nhiều máy (1 server + N client)
+### Option C: Run with javac / java
 
-1. Đảm bảo các máy cùng mạng LAN.
-2. Trên máy server:
-	- Chạy `ChatServer`
-	- Ghi lại địa chỉ LAN IP server (ví dụ `192.168.1.10`)
-3. Mở firewall cho port server (mặc định `6666`) nếu cần.
-4. Trên mỗi máy user:
-	- Chạy `ChatClientGUI`
-	- Đăng ký tài khoản (lần đầu) hoặc đăng nhập
-	- Nhập đúng IP server + port
+```powershell
+cd client
+
+# Compile (sqlite-jdbc JAR must be in classpath)
+javac -encoding UTF-8 -d target/classes -cp "path/to/sqlite-jdbc-3.45.3.0.jar" src/main/java/com/mycompany/client/*.java
+
+# Run server
+java -cp "target/classes;path/to/sqlite-jdbc-3.45.3.0.jar" com.mycompany.client.ChatServer
+
+# Run client
+java -cp "target/classes;path/to/sqlite-jdbc-3.45.3.0.jar" com.mycompany.client.ChatClientGUI
+```
+
+## 5) Multi-machine Setup (1 Server + N Clients)
+
+1. Ensure all machines are on the same **LAN**.
+2. On the server machine:
+   - Run `ChatServer`
+   - Note the LAN IP printed in the console (e.g. `192.168.1.10`)
+3. Open the firewall for the server port (default `6666`) if needed.
+4. On each client machine:
+   - Run `ChatClientGUI`
+   - Register (first time) or Login
+   - Enter the server's LAN IP + port
 5. Test:
-	- Gửi text, emoji ở phòng chung (All)
-	- Click user trong sidebar → gửi tin riêng (Private)
-	- Gửi file (`.pdf`, `.txt`, ...) và ảnh (`.png`, `.jpg`, ...)
-	- Đăng xuất → đăng nhập lại
+   - Send text & emoji in public chat (All)
+   - Click a user in the sidebar → send private messages
+   - Send files (`.pdf`, `.txt`, …) and images (`.png`, `.jpg`, …)
+   - Logout → Login again
 
-## 6) Protocol
+## 6) Protocol Reference
 
-| Prefix | Hướng | Mô tả |
-|--------|-------|-------|
-| `AUTH:LOGIN:user:pass` | Client → Server | Đăng nhập |
-| `AUTH:REGISTER:user:pass` | Client → Server | Đăng ký |
-| `AUTH:OK` / `AUTH:FAIL` | Server → Client | Phản hồi xác thực |
-| `TEXT:sender: message` | Broadcast | Tin nhắn phòng chung |
-| `FILE:sender:filename:base64` | Broadcast | File phòng chung |
-| `PRIVATE:sender:target:message` | Server → sender+target | Tin nhắn riêng 1-1 |
-| `USERLIST:user1,user2,...` | Broadcast | Danh sách user online |
-| `LOGOUT:username` | Client → Server | Yêu cầu đăng xuất |
+| Prefix | Direction | Description |
+|--------|-----------|-------------|
+| `AUTH:LOGIN:user:pass` | Client → Server | Login request |
+| `AUTH:REGISTER:user:pass` | Client → Server | Register request |
+| `AUTH:OK` / `AUTH:FAIL` | Server → Client | Authentication response |
+| `TEXT:sender: message` | Broadcast | Public chat message |
+| `FILE:sender:filename:base64` | Broadcast | Public file transfer |
+| `PRIVATE:sender:target:message` | Server → sender+target | Private text message |
+| `PRIVATE:sender:target:FILE:filename:base64` | Server → sender+target | Private file transfer |
+| `USERLIST:user1,user2,...` | Broadcast | Online user list |
+| `LOGOUT:username` | Client → Server | Logout request |
+| `REFRESH_USERS` | Client → Server | Request user list refresh |
 
-- File giới hạn tối đa **10 MB** phía client gửi.
-- Emoji trong HTML được encode dạng entity (`&#x...;`) để hiển thị ổn định với Swing HTML renderer.
-- Server **không giữ lịch sử** tin nhắn; chỉ relay message theo thời gian thực.
+**Notes:**
+- File size limit: **10 MB** (enforced client-side).
+- Emoji characters are encoded as HTML entities (`&#x...;`) for stable rendering in Swing's HTML renderer.
+- The server is **stateless** — it relays messages in real-time and does not persist chat history.
+- Auth response is sent **synchronously** before the writer thread starts, preventing race conditions.
 
-## 7) Hạn chế hiện tại
+## 7) Source File Overview
 
-- Chưa có lưu lịch sử chat vào database.
-- Chưa có mã hóa end-to-end.
-- Mật khẩu lưu plaintext trong SQLite (chưa hash).
-- Chưa hỗ trợ group chat (nhóm tùy chỉnh).
+| File | Lines | Responsibility |
+|------|-------|----------------|
+| `ChatServer.java` | 287 | TCP server, client handler threads, auth routing, broadcast/private message dispatch, user list management |
+| `ChatClientGUI.java` | 956 | Swing UI (header, sidebar, chat pane, input bar), per-conversation history, unread tracking, emoji picker, file send/receive, login/logout flow |
+| `UserManager.java` | 74 | SQLite connection, `register()`, `login()`, `getAllUsers()`, flexible DB path resolution |
+| `User.java` | 12 | Simple model class (username + password fields) |
+| `pom.xml` | 20 | Maven config: Java 21, `sqlite-jdbc` dependency |
 
-## 8) Hướng phát triển tiếp theo
+## 8) Current Limitations
 
-- Hash mật khẩu (BCrypt/Argon2).
-- Lưu lịch sử chat/file metadata vào DB.
-- Thêm group chat (tạo nhóm tùy chỉnh).
-- Bổ sung retry/chunking cho file lớn.
-- Tách protocol rõ ràng hơn (JSON framing) để mở rộng tính năng.
+- No chat history persistence (messages are lost on disconnect).
+- No end-to-end encryption.
+- Passwords stored as **plaintext** in SQLite (no hashing).
+- No custom group chat (only public All + private 1-on-1).
+- No message retry / chunking for large files.
+
+## 9) Future Improvements
+
+- Hash passwords (BCrypt / Argon2).
+- Persist chat history & file metadata to the database.
+- Add custom group chat (create/manage groups).
+- Implement retry / chunking for large file transfers.
+- Migrate protocol to JSON framing for better extensibility.
+- Add TLS/SSL for encrypted connections.
